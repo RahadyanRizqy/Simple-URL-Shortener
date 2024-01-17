@@ -4,3 +4,4 @@ node_modules/
 key.zip
 migration/
 views/
+testauth.js
