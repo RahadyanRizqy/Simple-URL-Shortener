@@ -1,8 +1,11 @@
 const admin = require('firebase-admin');
-const serviceAccount = require('../key/sh-rdnet-id-firebase-adminsdk-pdq6d-656d8a63fc.json');
+require('dotenv').config();
+
+const serviceAccount = require('../key/service-account-key.json');
+
 admin.initializeApp({
   credential: admin.credential.cert(serviceAccount),
-  databaseURL: "https://sh-rdnet-id-default-rtdb.asia-southeast1.firebasedatabase.app"
+  databaseURL: process.env.DB_URL
 });
 const db = admin.database();
 const usersRef = db.ref('users');
