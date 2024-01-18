@@ -4,6 +4,9 @@ const router = express.Router();
 const multer = require('multer');
 const upload = multer();
 
+router.route('/')
+    .get((req, res) => {res.send({msg: "This is beginning of the route"})});
+
 router.route('/login')
     .get(handlers.getLogin) // FOR FRONT-END
     .post(upload.none(), handlers.postLogin);

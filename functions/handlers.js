@@ -1,6 +1,6 @@
 const { db, usersRef, shortsRef } = require('./fire');
 const { fireAuth, signInWithEmailAndPassword, createUserWithEmailAndPassword } = require('./auth');
-const { generateUniqueRandomString, generateJwtToken, decodeJwtToken } = require('./func');
+const { generateUniqueRandomString, generateJwtToken, decodeJwtToken } = require('./middleware');
 const jwt = require('jsonwebtoken');
 require('dotenv').config();
 
@@ -89,7 +89,7 @@ const goAuth = async (req, res) => {
 
 const getShorts = async (req, res) => {
     try {
-        const { id } = req.query;
+        const { mask } = req.query;
         const userId = decodeJwtToken(req, process.env.SECRET_KEY, jwt);
 
         usersRef.child(userId).child('shorts').once('value', async (snapshot) => {
@@ -103,12 +103,11 @@ const getShorts = async (req, res) => {
                 });
                 
                 const shorts = await Promise.all(shortsPromises);
-                if (id) {
-                    const specificShort = shorts.find(short => short && short.id === id);
+                if (mask) {
+                    const specificShort = shorts.find(short => short && short.mask === mask);
                     if (specificShort) {
                         return res.status(200).json({
                             msg: 'Get specific short',
-                            id: id,
                             short: specificShort
                         });
                     } else {
@@ -169,19 +168,90 @@ const postShort = async (req, res) => {
 }
 
 const putShort = async (req, res) => {
-    return res.status(200).json({route: "PUT /shorts editing short"});
+    try {
+        const { mask } = req.query;
+        const userId = decodeJwtToken(req, process.env.SECRET_KEY, jwt);
+
+        usersRef.child(userId).child('shorts').once('value', async (snapshot) => {
+            const allShorts = snapshot.val();
+            const shortsPromises = [];
+
+            if (allShorts) {
+                allShorts.forEach(element => {
+                    const shortsPromise = db.ref('shorts').child(element).once('value').then(shortSnapshot => shortSnapshot.val());
+                    shortsPromises.push(shortsPromise);
+                });
+                
+                const shorts = await Promise.all(shortsPromises);
+                const specificShort = shorts.find(short => short && short.mask === mask);
+                if (specificShort) {
+                    const { newMask, newDesc, newUrl } = req.body;
+                    const newAllShorts = allShorts.filter(item => item !== mask);
+
+                    if (newAllShorts.includes(newMask)) {
+                        return res.status(400).json({ msg: "New shorten mask already exists" });
+                    }
+                    else {
+                        const userShortsRef = await usersRef.child(userId).child('shorts').once('value');
+                        const existingMasks = Object.values(userShortsRef.val() || {});
+                        const _newMask = newMask && newMask.trim() !== '' ? newMask : await generateUniqueRandomString(5, existingMasks);
+                    
+                        usersRef.child(userId).child('shorts').child(allShorts.findIndex(item => item == mask)).set(_newMask);
+                        const shortDetail = {
+                            'desc': newDesc ?? null,
+                            'url': newUrl,
+                            'mask': _newMask
+                        }
+                        shortsRef.child(_newMask).set(shortDetail);
+                        shortsRef.child(mask).remove()
+                        return res.status(201).json({
+                            msg: "Short updated",
+                            shortDetail: shortDetail
+                        });
+                    }
+                } else {
+                    return res.status(404).json({
+                        error: 'Short not found'
+                    });
+                }
+            } else {
+                return res.status(200).json({
+                    msg: "No shorts found for the user",
+                    userId: userId,
+                });
+            }
+        });
+    } catch (error) {
+        return res.status(400).json({msg: error.message});
+    }
 }
 
 const delShort = async (req, res) => {
-    const { id } = req.query;
-    if (id) {
-        return res.status(200).json({
-            msg: 'Del specific short',
-            id: id
+    try {
+        const { mask } = req.query;
+        const userId = decodeJwtToken(req, process.env.SECRET_KEY, jwt);
+
+        usersRef.child(userId).child('shorts').once('value', async (snapshot) => {
+            const allShorts = snapshot.val();
+            if (allShorts.includes(mask)) {
+                usersRef.child(userId).child('shorts').child(allShorts.findIndex(item => item == mask)).remove();
+                shortsRef.child(mask).remove();
+                return res.status(200).json({
+                    msg: "Short is deleted"
+                });
+            }
+            else {
+                return res.status(200).json({
+                    msg: "Short is not found"
+                });
+            }
         });
+
     }
-    else {
-        return res.status(200).json({msg: "Del all shorts"})
+    catch (error) {
+        return res.status(400).json({
+            msg: error.message
+        });
     }
 }
     
