@@ -211,7 +211,7 @@ const putShort = async (req, res) => {
                     }
                 } else {
                     return res.status(404).json({
-                        error: 'Short not found'
+                        error: 'Short is not found'
                     });
                 }
             } else {
