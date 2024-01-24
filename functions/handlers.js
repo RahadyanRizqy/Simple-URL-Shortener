@@ -1,76 +1,133 @@
-const { db, usersRef, shortsRef } = require('./fire');
+const { db, admin, usersRef, shortsRef } = require('./fire');
 const { fireAuth, signInWithEmailAndPassword, createUserWithEmailAndPassword } = require('./auth');
-const { generateUniqueRandomString, generateJwtToken, decodeJwtToken } = require('./middleware');
+const { generateUniqueRandomString, generateJwtToken, decodeJwtToken, validateAuth, validateMask } = require('./callbacks');
+const { forbiddenMasks, forbiddenChars } = require('./statics');
 const jwt = require('jsonwebtoken');
 require('dotenv').config();
 
-const getLogin = (req, res) => {
-    return res.status(200).json({
-        method: req.method,
-        msg: "This is /login route"
-    });
-}
-
-const postLogin = async (req, res) => {
-    try {
-        const { email, password } = req.body;
-        const userCredential = await signInWithEmailAndPassword(fireAuth, email, password);
-        const token = generateJwtToken(userCredential.user.uid, process.env.SECRET_KEY, jwt, process.env.JWT_EXP);
-
-        return res.status(200).json({
-            method: req.method,
-            msg: "This is /login route",
-            loginDetail: {
-                userId: userCredential.user.uid,
-                email: email,
-                token: token
-            }
-        });
-    }
-    catch (error) {
-        return res.status(400).json({
-            method: req.method,
-            msg: "This is /login route",
-            error: error.message
-        });
-    }
+const homeApi = async (req, res) => {
+    res.send({
+        msg: "This is beginning of the Simple URL Shortener backend route",
+        git: "https://github.com/RahadyanRizqy/Simple-URL-Shortener.git"
+    })
 }
 
 const getRegister = async (req, res) => {
-    return res.status(200).json({
+    res.send({
         method: req.method,
-        msg: "This is /register route"
+        route: req.path
     });
 }
 
 const postRegister = async (req, res) => {
     try {
         const { email, password } = req.body;
-        const userCredential = await createUserWithEmailAndPassword(fireAuth, email, password);
-        usersRef.child(userCredential.user.uid).set({
-            email: email,
-            id: userCredential.user.uid
-        });
-
-        return res.status(200).json({
-            method: req.method,
-            msg: "This is /register route",
-            registerDetail: {
-                uid: userCredential.user.uid,
-                email: userCredential.user.email
-            }
-        });
+        validateAuth(req);
+       
+        const adminAuth = admin.auth();
+        const usersFromAuth = (await adminAuth.listUsers()).users.map(user => user.email);
+        const usersFromDb = (await usersRef.orderByChild('email').once('value')).val() === null ? [] : Object.values((await usersRef.orderByChild('email').once('value')).val()).map(user => user.email);
+        
+        if (usersFromAuth.includes(email) && usersFromDb.includes(email)) {
+            throw new Error("user-already-exists-please-login");
+        }
+        else if (usersFromAuth.includes(email) && (!usersFromDb.includes(email))) {
+            throw new Error("user-exists-auth-only-contact-admin");
+        }
+        else if (!(usersFromAuth.includes(email)) && usersFromDb.includes(email)) {
+            throw new Error("user-exists-db-only-contact-admin");
+        }
+        else {
+            createUserWithEmailAndPassword(fireAuth, email, password)
+            .then((userCredential) => {
+                const registerDetail = {
+                    email: email,
+                    id: userCredential.user.uid
+                }
+                usersRef.child(userCredential.user.uid).set(registerDetail);
+                return res.status(201).json({
+                    method: req.method,
+                    msg: "register-success",
+                    registerDetail: registerDetail,
+                    route: req.path
+                });
+            })
+            .catch((error) => {
+                return res.status(400).json({
+                    method: req.method,
+                    msg: error.message,
+                    route: req.path
+                });
+            });
+        }
     }
     catch (error) {
         return res.status(400).json({
             method: req.method,
-            msg: "This is /register route",
-            error: error.message
+            msg: error.message,
+            route: req.path,
         });
     }
 }
 
+const getLogin = (req, res) => {
+    res.send({
+        method: req.method,
+        route: req.path
+    });
+}
 
+const postLogin = async (req, res) => {
+    try {
+        const { email, password } = req.body;
+        validateAuth(req);
+
+        const adminAuth = admin.auth();
+        const usersFromAuth = (await adminAuth.listUsers()).users.map(user => user.email);
+        const usersFromDb = Object.values((await usersRef.orderByChild('email').once('value')).val()).map(user => user.email);
+
+        if (!(usersFromAuth.includes(email)) && (!usersFromDb.includes(email))) {
+            throw new Error("user-does-not-exist-please-register");
+        }
+        else if (usersFromAuth.includes(email) && (!usersFromDb.includes(email))) {
+            throw new Error("user-exists-auth-only-contact-admin");
+        }
+        else if (!(usersFromAuth.includes(email)) && usersFromDb.includes(email)) {
+            throw new Error("user-exists-db-only-contact-admin");
+        }
+        else {
+            signInWithEmailAndPassword(fireAuth, email, password)
+            .then((userCredential) => {
+                const token = generateJwtToken(userCredential.user.uid, process.env.SECRET_KEY, jwt, process.env.JWT_EXP);
+                const loginDetail = {
+                    email: email,
+                    id: userCredential.user.uid,
+                    token: token
+                }
+                return res.status(200).json({
+                    method: req.method,
+                    msg: "login-success",
+                    loginDetail: loginDetail,
+                    route: req.path
+                });
+            })  
+            .catch((error) => {
+                return res.status(400).json({
+                    method: req.method,
+                    msg: error.message,
+                    route: req.path
+                });
+            }); 
+        }
+    }
+    catch (error) {
+        return res.status(400).json({
+            method: req.method,
+            msg: error.message,
+            route: req.path
+        });
+    }
+}
 
 const goAuth = async (req, res) => {
     try {
@@ -83,6 +140,19 @@ const goAuth = async (req, res) => {
             }
         });
     } catch (error) {
+        return res.status(400).json({msg: error.message});
+    }
+}
+
+const getForbiddens = async (req, res) => {
+    try {
+        res.send({
+            msg: "This is forbidden short and not purposed for the shortener",
+            masks: forbiddenMasks,
+            chars: forbiddenChars
+        })
+    }
+    catch (error) {
         return res.status(400).json({msg: error.message});
     }
 }
@@ -130,7 +200,11 @@ const getShorts = async (req, res) => {
             }
         });
     } catch (error) {
-        return res.status(400).json({msg: error.message});
+        return res.status(400).json({
+            method: req.method,
+            msg: error.message,
+            route: req.path
+        });
     }
 };
 
@@ -139,7 +213,8 @@ const postShort = async (req, res) => {
         const userId = decodeJwtToken(req, process.env.SECRET_KEY, jwt);
         
         let { mask, desc, url } = req.body;
-        
+        validateMask(mask, forbiddenChars);
+
         const userShortsRef = await usersRef.child(userId).child('shorts').once('value');
         const existingMasks = Object.values(userShortsRef.val() || {});
         const _mask = mask && mask.trim() !== '' ? mask : await generateUniqueRandomString(5, existingMasks);
@@ -147,6 +222,12 @@ const postShort = async (req, res) => {
         const maskExistsSnapshot = await shortsRef.child(_mask).once('value');
         if (maskExistsSnapshot.exists()) {
             return res.status(400).json({ msg: "Shorten already exists" });
+        }
+        else if (forbiddenMasks.includes(_mask)) {
+            return res.status(400).json({
+                msg: "Shorten are forbidden",
+                forbiddenMasks: forbiddenMasks
+            });
         }
         else {
             usersRef.child(userId).child('shorts').child(userShortsRef.val() === null ? 0 : userShortsRef.val().length).set(_mask);
@@ -163,13 +244,18 @@ const postShort = async (req, res) => {
         }
     
     } catch (error) {
-        return res.status(400).json({ msg: error.message });
+        return res.status(400).json({
+            method: req.method,
+            msg: error.message,
+            route: req.path
+        });
     }
 }
 
 const putShort = async (req, res) => {
     try {
         const { mask } = req.query;
+        
         const userId = decodeJwtToken(req, process.env.SECRET_KEY, jwt);
 
         usersRef.child(userId).child('shorts').once('value', async (snapshot) => {
@@ -186,6 +272,7 @@ const putShort = async (req, res) => {
                 const specificShort = shorts.find(short => short && short.mask === mask);
                 if (specificShort) {
                     const { newMask, newDesc, newUrl } = req.body;
+                    validateMask(newMask, forbiddenChars);
                     const newAllShorts = allShorts.filter(item => item !== mask);
 
                     if (newAllShorts.includes(newMask)) {
@@ -222,7 +309,11 @@ const putShort = async (req, res) => {
             }
         });
     } catch (error) {
-        return res.status(400).json({msg: error.message});
+        return res.status(400).json({
+            method: req.method,
+            msg: error.message,
+            route: req.path
+        });
     }
 }
 
@@ -259,23 +350,26 @@ const delShort = async (req, res) => {
 const goRedirect = async (req, res) => {
     const { mask } = req.params;
     try {
-        const snapshot = await shortsRef.orderByChild('mask').equalTo(mask).once('value');
-        const url = snapshot.val();
-        if (url) {
-            return res.redirect(302, url[Object.keys(url)[0]].url);
-        } else {
-            return res.status(404).json({ error: 'URL not found' });
-        }
+        shortsRef.orderByChild('mask').equalTo(mask).once('value', (snapshot) => {
+            const url = snapshot.val();
+            if (url) {
+                return res.redirect(302, url[Object.keys(url)[0]].url);
+            } else {
+                return res.status(404).json({ error: 'URL not found'});
+            }
+        });
     }
     catch (error) {
-        res.status(500).json({ error: 'Internal Server Error' });
+        return res.status(500).json({ error: 'Internal Server Error' });
     }
 }
 
-module.exports = { 
-    getLogin, postLogin, 
+module.exports = {
+    homeApi, 
     getRegister, postRegister,
+    getLogin, postLogin, 
     getShorts, postShort, putShort, delShort,
     goRedirect,
     goAuth,
+    getForbiddens
 };

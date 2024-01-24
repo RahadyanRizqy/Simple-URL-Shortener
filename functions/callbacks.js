@@ -25,4 +25,23 @@ function decodeJwtToken(req, secretKey, jwt) {
     return userId;
 }
 
-module.exports = { generateUniqueRandomString, generateJwtToken, decodeJwtToken };
+function validateAuth(req) {
+    if ((!req.body.email && !req.body.password) || (/^\s*$/.test(req.body.email) && (/^\s*$/.test(req.body.password)))) {
+        throw new Error("email-password-are-null-or-blankspaces");
+    }
+    else if (!req.body.email || (/^\s*$/.test(req.body.email))) {
+        throw new Error("email-is-null-or-blankspaces");
+    }
+    else if (!req.body.password || (/^\s*$/.test(req.body.password))) {
+        throw new Error("password-is-null-or-blankspaces");
+    }
+}
+
+function validateMask(mask, chars) {
+    const containForbiddenChars = chars.some(char => mask.includes(char));
+    if (containForbiddenChars) {
+        throw new Error("text-contains-forbidden-chars");
+    }
+}
+
+module.exports = { generateUniqueRandomString, generateJwtToken, decodeJwtToken, validateAuth, validateMask };
