@@ -140,7 +140,11 @@ const goAuth = async (req, res) => {
             }
         });
     } catch (error) {
-        return res.status(400).json({msg: error.message});
+        return res.status(400).json({
+            method: req.method,
+            msg: error.message,
+            route: req.path
+        });
     }
 }
 
@@ -153,7 +157,11 @@ const getForbiddens = async (req, res) => {
         })
     }
     catch (error) {
-        return res.status(400).json({msg: error.message});
+        return res.status(400).json({
+            method: req.method,
+            msg: error.message,
+            route: req.path
+        });
     }
 }
 
@@ -341,7 +349,9 @@ const delShort = async (req, res) => {
     }
     catch (error) {
         return res.status(400).json({
-            msg: error.message
+            method: req.method,
+            msg: error.message,
+            route: req.path
         });
     }
 }
@@ -360,7 +370,11 @@ const goRedirect = async (req, res) => {
         });
     }
     catch (error) {
-        return res.status(500).json({ error: 'Internal Server Error' });
+        return res.status(400).json({
+            method: req.method,
+            msg: error.message,
+            route: req.path
+        });
     }
 }
 
