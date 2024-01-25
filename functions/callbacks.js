@@ -44,4 +44,16 @@ function validateMask(mask, chars) {
     }
 }
 
-module.exports = { generateUniqueRandomString, generateJwtToken, decodeJwtToken, validateAuth, validateMask };
+function validateCreateShort(req) {
+    if ((!req.body.mask && !req.body.url) || (/^\s*$/.test(req.body.mask) && (/^\s*$/.test(req.body.url)))) {
+        throw new Error("mask-url-are-null-or-blankspaces");
+    }
+    else if (!req.body.mask || (/^\s*$/.test(req.body.mask))) {
+        throw new Error("mask-is-null-or-blankspaces");
+    }
+    else if (!req.body.url || (/^\s*$/.test(req.body.url))) {
+        throw new Error("url-is-null-or-blankspaces");
+    }
+}
+
+module.exports = { generateUniqueRandomString, generateJwtToken, decodeJwtToken, validateAuth, validateMask, validateCreateShort };

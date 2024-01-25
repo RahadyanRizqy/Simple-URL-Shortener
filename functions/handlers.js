@@ -1,6 +1,6 @@
 const { db, admin, usersRef, shortsRef } = require('./fire');
 const { fireAuth, signInWithEmailAndPassword, createUserWithEmailAndPassword } = require('./auth');
-const { generateUniqueRandomString, generateJwtToken, decodeJwtToken, validateAuth, validateMask } = require('./callbacks');
+const { generateUniqueRandomString, generateJwtToken, decodeJwtToken, validateAuth, validateMask, validateCreateShort } = require('./callbacks');
 const { forbiddenMasks, forbiddenChars } = require('./statics');
 const jwt = require('jsonwebtoken');
 require('dotenv').config();
@@ -133,11 +133,12 @@ const goAuth = async (req, res) => {
     try {
         const userId = decodeJwtToken(req, process.env.SECRET_KEY, jwt);
         return res.status(200).json({
-            method: req.method,
-            msg: "This is /login route",
             authDetail: {
                 userId: userId,
-            }
+            },
+            method: req.method,
+            msg: "valid-token",
+            route: req.path
         });
     } catch (error) {
         return res.status(400).json({
@@ -151,9 +152,13 @@ const goAuth = async (req, res) => {
 const getForbiddens = async (req, res) => {
     try {
         res.send({
+            method: req.method,
             msg: "This is forbidden short and not purposed for the shortener",
-            masks: forbiddenMasks,
-            chars: forbiddenChars
+            forbidden: {
+                masks: forbiddenMasks,
+                chars: forbiddenChars
+            },
+            route: req.path
         })
     }
     catch (error) {
@@ -185,25 +190,33 @@ const getShorts = async (req, res) => {
                     const specificShort = shorts.find(short => short && short.mask === mask);
                     if (specificShort) {
                         return res.status(200).json({
-                            msg: 'Get specific short',
+                            method: req.method,
+                            msg: "get-specific-short",
+                            route: req.path,
                             short: specificShort
                         });
                     } else {
-                        return res.status(404).json({
-                            error: 'Short not found'
+                        return res.status(400).json({
+                            method: req.method,
+                            msg: "short-not-found",
+                            route: req.path
                         });
                     }
                 } else {
                     return res.status(200).json({
-                        msg: "Get all shorts",
+                        method: req.method,
+                        msg: "get-all-shorts",
                         userId: userId,
+                        route: req.path,
                         shorts: shorts
                     });
                 }
             } else {
                 return res.status(200).json({
-                    msg: "No shorts found for the user",
+                    method: req.method,
+                    msg: "no-shorts-found-for-the-user",
                     userId: userId,
+                    route: req.path
                 });
             }
         });
@@ -220,7 +233,8 @@ const postShort = async (req, res) => {
     try {
         const userId = decodeJwtToken(req, process.env.SECRET_KEY, jwt);
         
-        let { mask, desc, url } = req.body;
+        let { mask, url, desc } = req.body;
+        validateCreateShort(req);
         validateMask(mask, forbiddenChars);
 
         const userShortsRef = await usersRef.child(userId).child('shorts').once('value');
@@ -229,14 +243,19 @@ const postShort = async (req, res) => {
 
         const maskExistsSnapshot = await shortsRef.child(_mask).once('value');
         if (maskExistsSnapshot.exists()) {
-            return res.status(400).json({ msg: "Shorten already exists" });
-        }
-        else if (forbiddenMasks.includes(_mask)) {
             return res.status(400).json({
-                msg: "Shorten are forbidden",
-                forbiddenMasks: forbiddenMasks
+                method: req.method,
+                msg: "shorten-mask-already-exists",
+                route: req.path
             });
         }
+        // else if (forbiddenMasks.includes(_mask)) {
+            // return res.status(400).json({
+            //     msg: "Shorten are forbidden",
+            //     forbiddenMasks: forbiddenMasks
+            // });
+            // getForbiddens();
+        // }
         else {
             usersRef.child(userId).child('shorts').child(userShortsRef.val() === null ? 0 : userShortsRef.val().length).set(_mask);
             const shortDetail = {
@@ -246,7 +265,9 @@ const postShort = async (req, res) => {
             }
             shortsRef.child(_mask).set(shortDetail);
             return res.status(201).json({
-                msg: "Short added",
+                method: req.method,
+                msg: "short-added",
+                route: req.path,
                 shortDetail: shortDetail
             });
         }
@@ -279,7 +300,7 @@ const putShort = async (req, res) => {
                 const shorts = await Promise.all(shortsPromises);
                 const specificShort = shorts.find(short => short && short.mask === mask);
                 if (specificShort) {
-                    const { newMask, newDesc, newUrl } = req.body;
+                    const { newMask, newUrl, newDesc } = req.body;
                     validateMask(newMask, forbiddenChars);
                     const newAllShorts = allShorts.filter(item => item !== mask);
 
@@ -300,19 +321,25 @@ const putShort = async (req, res) => {
                         shortsRef.child(_newMask).set(shortDetail);
                         shortsRef.child(mask).remove()
                         return res.status(201).json({
-                            msg: "Short updated",
+                            method: req.method,
+                            msg: "short-edited",
+                            route: req.path,
                             shortDetail: shortDetail
                         });
                     }
                 } else {
                     return res.status(404).json({
-                        error: 'Short is not found'
+                        method: req.method,
+                        msg: "short-is-not-found",
+                        route: req.path
                     });
                 }
             } else {
                 return res.status(200).json({
-                    msg: "No shorts found for the user",
+                    method: req.method,
+                    msg: "no-shorts-found-for-the-user",
                     userId: userId,
+                    route: req.path
                 });
             }
         });
@@ -336,12 +363,18 @@ const delShort = async (req, res) => {
                 usersRef.child(userId).child('shorts').child(allShorts.findIndex(item => item == mask)).remove();
                 shortsRef.child(mask).remove();
                 return res.status(200).json({
-                    msg: "Short is deleted"
+                    mask: mask,
+                    method: req.method,
+                    msg: "short-is-deleted",
+                    route: req.path
                 });
             }
             else {
                 return res.status(200).json({
-                    msg: "Short is not found"
+                    method: req.method,
+                    msg: "no-shorts-found-for-the-user",
+                    userId: userId,
+                    route: req.path
                 });
             }
         });
@@ -365,7 +398,7 @@ const goRedirect = async (req, res) => {
             if (url) {
                 return res.redirect(302, url[Object.keys(url)[0]].url);
             } else {
-                return res.status(404).json({ error: 'URL not found'});
+                return res.status(404).json({ error: 'Masked URL not found'});
             }
         });
     }
@@ -387,3 +420,6 @@ module.exports = {
     goAuth,
     getForbiddens
 };
+
+// GOTT ERHALTE, GOTT BESCHUTZE
+// UNSERN GUTEN VATERLAND!
