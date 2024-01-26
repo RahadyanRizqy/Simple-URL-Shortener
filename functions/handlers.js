@@ -1,6 +1,6 @@
 const { db, admin, usersRef, shortsRef } = require('./fire');
 const { fireAuth, signInWithEmailAndPassword, createUserWithEmailAndPassword } = require('./auth');
-const { generateUniqueRandomString, generateJwtToken, decodeJwtToken, validateAuth, validateMask, validateCreateShort } = require('./callbacks');
+const { generateUniqueRandomString, encodeAuth, decodeAuth, validateAuth, validateForbidden, validateShort } = require('./midwares');
 const { forbiddenMasks, forbiddenChars } = require('./statics');
 const jwt = require('jsonwebtoken');
 require('dotenv').config();
@@ -98,7 +98,7 @@ const postLogin = async (req, res) => {
         else {
             signInWithEmailAndPassword(fireAuth, email, password)
             .then((userCredential) => {
-                const token = generateJwtToken(userCredential.user.uid, process.env.SECRET_KEY, jwt, process.env.JWT_EXP);
+                const token = encodeAuth(userCredential.user.uid, process.env.SECRET_KEY, jwt, process.env.JWT_EXP);
                 const loginDetail = {
                     email: email,
                     id: userCredential.user.uid,
@@ -131,7 +131,7 @@ const postLogin = async (req, res) => {
 
 const goAuth = async (req, res) => {
     try {
-        const userId = decodeJwtToken(req, process.env.SECRET_KEY, jwt);
+        const userId = decodeAuth(req, process.env.SECRET_KEY, jwt);
         return res.status(200).json({
             authDetail: {
                 userId: userId,
@@ -153,7 +153,7 @@ const getForbiddens = async (req, res) => {
     try {
         res.send({
             method: req.method,
-            msg: "This is forbidden short and not purposed for the shortener",
+            msg: "These are forbidden shorts/masks and not purposed for the shortener",
             forbidden: {
                 masks: forbiddenMasks,
                 chars: forbiddenChars
@@ -173,7 +173,7 @@ const getForbiddens = async (req, res) => {
 const getShorts = async (req, res) => {
     try {
         const { mask } = req.query;
-        const userId = decodeJwtToken(req, process.env.SECRET_KEY, jwt);
+        const userId = decodeAuth(req, process.env.SECRET_KEY, jwt);
 
         usersRef.child(userId).child('shorts').once('value', async (snapshot) => {
             const allShorts = snapshot.val();
@@ -231,15 +231,15 @@ const getShorts = async (req, res) => {
 
 const postShort = async (req, res) => {
     try {
-        const userId = decodeJwtToken(req, process.env.SECRET_KEY, jwt);
+        const userId = decodeAuth(req, process.env.SECRET_KEY, jwt);
         
         let { mask, url, desc } = req.body;
-        validateCreateShort(req);
-        validateMask(mask, forbiddenChars);
+        validateShort(req);
+        validateForbidden(mask, forbiddenChars);
 
         const userShortsRef = await usersRef.child(userId).child('shorts').once('value');
         const existingMasks = Object.values(userShortsRef.val() || {});
-        const _mask = mask && mask.trim() !== '' ? mask : await generateUniqueRandomString(5, existingMasks);
+        const _mask = mask ? mask : await generateUniqueRandomString(5, existingMasks);
 
         const maskExistsSnapshot = await shortsRef.child(_mask).once('value');
         if (maskExistsSnapshot.exists()) {
@@ -284,8 +284,7 @@ const postShort = async (req, res) => {
 const putShort = async (req, res) => {
     try {
         const { mask } = req.query;
-        
-        const userId = decodeJwtToken(req, process.env.SECRET_KEY, jwt);
+        const userId = decodeAuth(req, process.env.SECRET_KEY, jwt);
 
         usersRef.child(userId).child('shorts').once('value', async (snapshot) => {
             const allShorts = snapshot.val();
@@ -301,16 +300,21 @@ const putShort = async (req, res) => {
                 const specificShort = shorts.find(short => short && short.mask === mask);
                 if (specificShort) {
                     const { newMask, newUrl, newDesc } = req.body;
-                    validateMask(newMask, forbiddenChars);
+                    validateShort(req);
+                    validateForbidden(newMask, forbiddenChars);
                     const newAllShorts = allShorts.filter(item => item !== mask);
 
                     if (newAllShorts.includes(newMask)) {
-                        return res.status(400).json({ msg: "New shorten mask already exists" });
+                        return res.status(400).json({
+                            method: req.method,
+                            msg: "new-shorten-mask-already-exists",
+                            route: req.path
+                        });
                     }
                     else {
                         const userShortsRef = await usersRef.child(userId).child('shorts').once('value');
                         const existingMasks = Object.values(userShortsRef.val() || {});
-                        const _newMask = newMask && newMask.trim() !== '' ? newMask : await generateUniqueRandomString(5, existingMasks);
+                        const _newMask = newMask ? newMask : await generateUniqueRandomString(5, existingMasks);
                     
                         usersRef.child(userId).child('shorts').child(allShorts.findIndex(item => item == mask)).set(_newMask);
                         const shortDetail = {
@@ -355,7 +359,7 @@ const putShort = async (req, res) => {
 const delShort = async (req, res) => {
     try {
         const { mask } = req.query;
-        const userId = decodeJwtToken(req, process.env.SECRET_KEY, jwt);
+        const userId = decodeAuth(req, process.env.SECRET_KEY, jwt);
 
         usersRef.child(userId).child('shorts').once('value', async (snapshot) => {
             const allShorts = snapshot.val();
@@ -378,7 +382,6 @@ const delShort = async (req, res) => {
                 });
             }
         });
-
     }
     catch (error) {
         return res.status(400).json({

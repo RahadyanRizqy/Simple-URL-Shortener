@@ -10,7 +10,7 @@ async function generateUniqueRandomString(length=5, existingMasks) {
     return randomString;
 }
 
-function generateJwtToken(userId, secretKey, jwt, expiresIn='1h') {
+function encodeAuth(userId, secretKey, jwt, expiresIn='1h') {
     const payload = {
         sub: userId,
         iat: Math.floor(Date.now() / 1000),
@@ -18,7 +18,7 @@ function generateJwtToken(userId, secretKey, jwt, expiresIn='1h') {
     return jwt.sign(payload, secretKey, { expiresIn });
 }
 
-function decodeJwtToken(req, secretKey, jwt) {
+function decodeAuth(req, secretKey, jwt) {
     const token = req.header('Authorization').replace('Bearer', '').trim();
     const decodedToken = jwt.verify(token, secretKey);
     const userId = decodedToken.sub;
@@ -27,33 +27,33 @@ function decodeJwtToken(req, secretKey, jwt) {
 
 function validateAuth(req) {
     if ((!req.body.email && !req.body.password) || (/^\s*$/.test(req.body.email) && (/^\s*$/.test(req.body.password)))) {
-        throw new Error("email-password-are-null-or-blankspaces");
+        throw new Error("email-and-password-are-null-or-having-blankspaces");
     }
     else if (!req.body.email || (/^\s*$/.test(req.body.email))) {
-        throw new Error("email-is-null-or-blankspaces");
+        throw new Error("email-is-null-or-having-blankspaces");
     }
     else if (!req.body.password || (/^\s*$/.test(req.body.password))) {
-        throw new Error("password-is-null-or-blankspaces");
+        throw new Error("password-is-null-or-having-blankspaces");
     }
 }
 
-function validateMask(mask, chars) {
+function validateForbidden(mask, chars) {
     const containForbiddenChars = chars.some(char => mask.includes(char));
     if (containForbiddenChars) {
         throw new Error("text-contains-forbidden-chars");
     }
 }
 
-function validateCreateShort(req) {
+function validateShort(req) {
     if ((!req.body.mask && !req.body.url) || (/^\s*$/.test(req.body.mask) && (/^\s*$/.test(req.body.url)))) {
-        throw new Error("mask-url-are-null-or-blankspaces");
+        throw new Error("mask-and-url-are-null-or-having-blankspaces");
     }
     else if (!req.body.mask || (/^\s*$/.test(req.body.mask))) {
-        throw new Error("mask-is-null-or-blankspaces");
+        throw new Error("mask-is-null-or-having-blankspaces");
     }
     else if (!req.body.url || (/^\s*$/.test(req.body.url))) {
-        throw new Error("url-is-null-or-blankspaces");
+        throw new Error("url-is-null-or-having-blankspaces");
     }
 }
 
-module.exports = { generateUniqueRandomString, generateJwtToken, decodeJwtToken, validateAuth, validateMask, validateCreateShort };
+module.exports = { generateUniqueRandomString, encodeAuth, decodeAuth, validateAuth, validateForbidden, validateShort };
