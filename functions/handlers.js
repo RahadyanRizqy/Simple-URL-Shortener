@@ -326,7 +326,7 @@ const putShort = async (req, res) => {
                         shortsRef.child(mask).remove()
                         return res.status(201).json({
                             method: req.method,
-                            msg: "short-edited",
+                            msg: "short-is-edited",
                             route: req.path,
                             shortDetail: shortDetail
                         });
