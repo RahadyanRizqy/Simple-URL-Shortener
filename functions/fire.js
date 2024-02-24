@@ -10,4 +10,5 @@ admin.initializeApp({
 const db = admin.database();
 const usersRef = db.ref('users');
 const shortsRef = db.ref('shorts');
-module.exports = { db, admin, usersRef, shortsRef };
+const serialKeyRef = db.ref('serial_key');
+module.exports = { db, admin, usersRef, shortsRef, serialKeyRef };

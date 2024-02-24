@@ -28,6 +28,9 @@ router.route('/api/shorts') // CAN BE MODIFIED TO /links
 router.route('/api/forbiddens')
     .get(handlers.getForbiddens);
 
+router.route('/api/reqtoken')
+    .get(handlers.reqToken);
+
 router.get('/:mask', handlers.goRedirect);
 
 module.exports = router;

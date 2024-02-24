@@ -1,7 +1,33 @@
-const { db, admin, usersRef, shortsRef } = require('./fire');
-const { fireAuth, signInWithEmailAndPassword, createUserWithEmailAndPassword } = require('./auth');
-const { generateUniqueRandomString, encodeAuth, decodeAuth, validateAuth, validateForbidden, validateShort } = require('./midwares');
-const { forbiddenMasks, forbiddenChars } = require('./statics');
+const { 
+    db, 
+    admin, 
+    usersRef, 
+    shortsRef, 
+    serialKeyRef 
+} = require('./fire');
+
+const { 
+    fireAuth, 
+    signInWithEmailAndPassword, 
+    createUserWithEmailAndPassword 
+} = require('./auth');
+
+const { 
+    generateUniqueRandomString,
+    decodeAuth, 
+    validateAuth, 
+    validateForbidden, 
+    validateShort,
+    encodeAuth,
+    loginMethod,
+    registerMethod 
+} = require('./midwares');
+
+const { 
+    forbiddenMasks, 
+    forbiddenChars 
+} = require('./statics');
+
 const jwt = require('jsonwebtoken');
 require('dotenv').config();
 
@@ -38,27 +64,8 @@ const postRegister = async (req, res) => {
             throw new Error("user-exists-db-only-contact-admin");
         }
         else {
-            createUserWithEmailAndPassword(fireAuth, email, password)
-            .then((userCredential) => {
-                const registerDetail = {
-                    email: email,
-                    id: userCredential.user.uid
-                }
-                usersRef.child(userCredential.user.uid).set(registerDetail);
-                return res.status(201).json({
-                    method: req.method,
-                    msg: "register-success",
-                    registerDetail: registerDetail,
-                    route: req.path
-                });
-            })
-            .catch((error) => {
-                return res.status(400).json({
-                    method: req.method,
-                    msg: error.message,
-                    route: req.path
-                });
-            });
+            const result = await registerMethod(req, createUserWithEmailAndPassword, fireAuth, email, password, usersRef);
+            return res.status(200).json(result);
         }
     }
     catch (error) {
@@ -96,28 +103,8 @@ const postLogin = async (req, res) => {
             throw new Error("user-exists-db-only-contact-admin");
         }
         else {
-            signInWithEmailAndPassword(fireAuth, email, password)
-            .then((userCredential) => {
-                const token = encodeAuth(userCredential.user.uid, process.env.SECRET_KEY, jwt, process.env.JWT_EXP);
-                const loginDetail = {
-                    email: email,
-                    id: userCredential.user.uid,
-                    token: token
-                }
-                return res.status(200).json({
-                    method: req.method,
-                    msg: "login-success",
-                    loginDetail: loginDetail,
-                    route: req.path
-                });
-            })  
-            .catch((error) => {
-                return res.status(400).json({
-                    method: req.method,
-                    msg: error.message,
-                    route: req.path
-                });
-            }); 
+            const result = await loginMethod(req, signInWithEmailAndPassword, fireAuth, email, password, process, jwt);
+            return res.status(200).json(result);
         }
     }
     catch (error) {
@@ -249,13 +236,13 @@ const postShort = async (req, res) => {
                 route: req.path
             });
         }
-        // else if (forbiddenMasks.includes(_mask)) {
-            // return res.status(400).json({
-            //     msg: "Shorten are forbidden",
-            //     forbiddenMasks: forbiddenMasks
-            // });
-            // getForbiddens();
-        // }
+        else if (forbiddenMasks.includes(_mask)) {
+            return res.status(400).json({
+                method: req.method,
+                msg: "shorten-are-forbidden",
+                forbiddenMasks: forbiddenMasks
+            });
+        }
         else {
             usersRef.child(userId).child('shorts').child(userShortsRef.val() === null ? 0 : userShortsRef.val().length).set(_mask);
             const shortDetail = {
@@ -414,6 +401,56 @@ const goRedirect = async (req, res) => {
     }
 }
 
+const updateData = () => {
+    const { customAlphabet } = require('nanoid');
+    const password = customAlphabet('0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz', 20)();
+    const formattedPassword = password.match(/.{1,5}/g).join('-');
+    serialKeyRef.set(formattedPassword);
+}
+
+setInterval(updateData, process.env.SERIAL_KEY_RESET);
+
+// const getTokenPassword = async (req, res) => {
+//     serialKeyRef.once('value', (snapshot) => {
+//         const pass = snapshot.val();
+//         return res.status(200).json({
+//             method: req.method,
+//             token: pass,
+//             route_path: req.path
+//         });
+//     });
+// }
+
+const reqToken = async (req, res) => {
+    const { email, password, serialkey, exp } = req.query;
+    try {
+        if (!serialkey) { throw new Error('no-serialkey'); }
+
+        const snapshot = await serialKeyRef.once('value');
+        const serial_key_firebase = snapshot.val();
+
+        if (serial_key_firebase !== serialkey) { throw new Error('invalid-serialkey'); }
+
+        const result = await loginMethod(req, signInWithEmailAndPassword, fireAuth, email, password, process, jwt);
+
+        if (result.msg === 'login-success') {
+            const token = encodeAuth(result.loginDetail.id, process.env.SECRET_KEY, jwt, exp);
+            return res.status(200).json({ 
+                token: token,
+                expiredIn: exp
+            });
+        }
+    } catch (error) {
+        return res.status(400).json({
+            method: req.method,
+            msg: error.message,
+            route: req.path
+        });
+    }
+};
+
+
+
 module.exports = {
     homeApi, 
     getRegister, postRegister,
@@ -421,7 +458,9 @@ module.exports = {
     getShorts, postShort, putShort, delShort,
     goRedirect,
     goAuth,
-    getForbiddens
+    getForbiddens,
+    getTokenPassword,
+    reqToken
 };
 
 // GOTT ERHALTE, GOTT BESCHUTZE

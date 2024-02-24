@@ -56,4 +56,50 @@ function validateShort(req) {
     }
 }
 
-module.exports = { generateUniqueRandomString, encodeAuth, decodeAuth, validateAuth, validateForbidden, validateShort };
+async function loginMethod(req, fb_sign_func, fireAuth, email, password, process, jwt) {
+    try {
+        const user_cred = await fb_sign_func(fireAuth, email, password);
+        const token = encodeAuth(user_cred.user.uid, process.env.SECRET_KEY, jwt, process.env.JWT_EXP);
+        const loginDetail = {
+            email: email,
+            id: user_cred.user.uid,
+            token: token
+        };
+        return {
+            method: req.method,
+            msg: "login-success",
+            loginDetail: loginDetail,
+            route: req.path
+        };
+    } 
+    catch (error) { throw new Error(error.message); }
+}
+
+async function registerMethod(req, fb_reg_func, fireAuth, email, password, users_ref) {
+    try {
+        const user_cred = await fb_reg_func(fireAuth, email, password);
+        const registerDetail = {
+            email: email,
+            id: user_cred.user.uid
+        }
+        users_ref.child(user_cred.user.uid).set(registerDetail);
+        return {
+            method: req.method,
+            msg: "register-success",
+            registerDetail: registerDetail,
+            route: req.path
+        }
+    }
+    catch (error) { throw new Error(error.message); }
+}
+
+module.exports = { 
+    generateUniqueRandomString,
+    decodeAuth, 
+    validateAuth, 
+    validateForbidden, 
+    validateShort,
+    encodeAuth,
+    loginMethod,
+    registerMethod
+};
