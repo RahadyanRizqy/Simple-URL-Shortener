@@ -410,17 +410,6 @@ const updateData = () => {
 
 setInterval(updateData, process.env.SERIAL_KEY_RESET);
 
-// const getTokenPassword = async (req, res) => {
-//     serialKeyRef.once('value', (snapshot) => {
-//         const pass = snapshot.val();
-//         return res.status(200).json({
-//             method: req.method,
-//             token: pass,
-//             route_path: req.path
-//         });
-//     });
-// }
-
 const reqToken = async (req, res) => {
     const { email, password, serialkey, exp } = req.query;
     try {
@@ -449,8 +438,6 @@ const reqToken = async (req, res) => {
     }
 };
 
-
-
 module.exports = {
     homeApi, 
     getRegister, postRegister,
@@ -459,7 +446,6 @@ module.exports = {
     goRedirect,
     goAuth,
     getForbiddens,
-    getTokenPassword,
     reqToken
 };
 
